@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Namz IA - Assistant intelligent</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Prism.js pour la coloration syntaxique -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css">
+    
+    <!-- Charger Prism.js dans le head pour qu'il soit disponible immédiatement -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-php.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-ruby.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Namz IA</h1>
+            <p>Assistant IA maison, rapide et léger.</p>
+            <nav class="tab-bar">
+                <a href="/" class="tab active">💬 Chat IA</a>
+                <a href="/templates" class="tab">📦 Templates</a>
+                <a href="/web_learn" class="tab">🌐 Apprentissage Web</a>
+                <a href="/auto_learn" class="tab">🤖 Apprentissage Auto</a>
+            </nav>
+        </header>
+        <main>
+            <section class="chat-box" id="chat-box">
+                <!-- Messages IA / utilisateur injectés par JS -->
+            </section>
+            <form id="chat-form">
+                <input type="text" id="message-input" placeholder="Écrivez votre message..." autocomplete="off" required>
+                <button type="submit">Envoyer</button>
+                <button type="button" id="clear-btn" title="Effacer la conversation">🗑️</button>
+            </form>
+            <div id="loader" style="display:none;text-align:center;margin-top:10px;">⏳ Génération en cours...</div>
+        </main>
+    </div>
+    <script>
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('message-input');
+        const chatBox = document.getElementById('chat-box');
+        const loader = document.getElementById('loader');
+        const clearBtn = document.getElementById('clear-btn');
+
+        function parseMarkdown(text) {
+            let result = '';
+            
+            // 1. Détecter et traiter les sections avec titres (##)
+            const sections = [];
+            let currentSection = { title: null, content: '' };
+            const lines = text.split('\n');
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.startsWith('## ')) {
+                    if (currentSection.content.trim()) {
+                        sections.push(currentSection);
+                    }
+                    currentSection = { title: line.substring(3), content: '' };
+                } else {
+                    currentSection.content += line + '\n';
+                }
+            }
+            if (currentSection.content.trim() || currentSection.title) {
+                sections.push(currentSection);
+            }
+            
+            // 2. Traiter chaque section
+            sections.forEach(section => {
+                if (section.title) {
+                    result += `<div class="response-section">
+                        <h3 class="section-title">${escapeHtml(section.title)}</h3>
+                        <div class="section-content">`;
+                }
+                
+                // 3. Détecter les blocs de code dans le contenu
+                const content = section.title ? section.content : text;
+                const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+                let lastIndex = 0;
+                let match;
+
+                while ((match = codeBlockRegex.exec(content)) !== null) {
+                    // Ajoute le texte avant le bloc de code
+                    const textBefore = content.substring(lastIndex, match.index).trim();
+                    if (textBefore) {
+                        result += `<div class="response-text">${formatText(textBefore)}</div>`;
+                    }
+                    
+                    const lang = match[1] || 'text';
+                    const code = match[2];
+                    const codeId = 'code-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                    
+                    // Icône selon le langage
+                    const langIcons = {
+                        'python': '🐍', 'javascript': '🟨', 'js': '🟨', 'html': '🌐', 
+                        'css': '🎨', 'java': '☕', 'php': '🐘', 'c': '⚙️', 'cpp': '⚙️',
+                        'csharp': '#️⃣', 'ruby': '💎', 'go': '🔵', 'rust': '🦀',
+                        'sql': '🗄️', 'bash': '💻', 'shell': '💻', 'typescript': '💙',
+                        'json': '📋', 'xml': '📄', 'yaml': '📝'
+                    };
+                    const icon = langIcons[lang.toLowerCase()] || '📝';
+                    
+                    // Crée un bloc de code avec boutons et coloration
+                    result += `
+                        <div class="code-block">
+                            <div class="code-header">
+                                <span class="code-lang">${icon} ${lang.toUpperCase()}</span>
+                                <div class="code-actions">
+                                    <button onclick="copyCode('${codeId}')" class="code-btn" title="Copier le code">📋 Copier</button>
+                                    <button onclick="downloadCode('${codeId}', '${lang}')" class="code-btn" title="Télécharger">💾 Télécharger</button>
+                                </div>
+                            </div>
+                            <pre id="${codeId}" class="line-numbers"><code class="language-${lang}">${escapeHtml(code)}</code></pre>
+                        </div>
+                    `;
+                    lastIndex = codeBlockRegex.lastIndex;
+                }
+                
+                // Ajoute le texte restant
+                const textAfter = content.substring(lastIndex).trim();
+                if (textAfter) {
+                    result += `<div class="response-text">${formatText(textAfter)}</div>`;
+                }
+                
+                if (section.title) {
+                    result += `</div></div>`;
+                }
+            });
+            
+            return result || `<div class="response-text">${formatText(text)}</div>`;
+        }
+
+        function formatText(text) {
+            // Convertir les listes à puces
+            text = text.replace(/^\*\*(\d+)\.\s+(.+?)\*\*/gm, '<div class="list-item"><span class="list-number">$1.</span> <strong>$2</strong></div>');
+            text = text.replace(/^-\s+(.+)/gm, '<div class="list-item"><span class="bullet">•</span> $1</div>');
+            text = text.replace(/^\*\s+(.+)/gm, '<div class="list-item"><span class="bullet">•</span> $1</div>');
+            
+            // Convertir le texte en gras
+            text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            
+            // Convertir les liens
+            text = text.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank">$1</a>');
+            
+            // Convertir les retours à la ligne
+            text = text.replace(/\n/g, '<br>');
+            
+            return escapeHtml(text).replace(/&lt;strong&gt;/g, '<strong>')
+                                    .replace(/&lt;\/strong&gt;/g, '</strong>')
+                                    .replace(/&lt;br&gt;/g, '<br>')
+                                    .replace(/&lt;div class="list-item"&gt;/g, '<div class="list-item">')
+                                    .replace(/&lt;\/div&gt;/g, '</div>')
+                                    .replace(/&lt;span class="list-number"&gt;/g, '<span class="list-number">')
+                                    .replace(/&lt;span class="bullet"&gt;/g, '<span class="bullet">')
+                                    .replace(/&lt;\/span&gt;/g, '</span>')
+                                    .replace(/&lt;a href="(.+?)" target="_blank"&gt;/g, '<a href="$1" target="_blank">')
+                                    .replace(/&lt;\/a&gt;/g, '</a>');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyCode(codeId) {
+            const codeElement = document.getElementById(codeId);
+            const code = codeElement.textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                // Feedback visuel
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✅ Copié !';
+                btn.style.background = '#10b981';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            }).catch(err => {
+                alert('Erreur lors de la copie');
+            });
+        }
+
+        function downloadCode(codeId, lang) {
+            const codeElement = document.getElementById(codeId);
+            const code = codeElement.textContent;
+            
+            // Détermine l'extension de fichier
+            const extensions = {
+                'python': 'py',
+                'javascript': 'js',
+                'js': 'js',
+                'html': 'html',
+                'css': 'css',
+                'c': 'c',
+                'cpp': 'cpp',
+                'csharp': 'cs',
+                'java': 'java',
+                'sql': 'sql',
+                'bash': 'sh',
+                'shell': 'sh'
+            };
+            const ext = extensions[lang.toLowerCase()] || 'txt';
+            const filename = `code_${Date.now()}.${ext}`;
+            
+            // Crée et télécharge le fichier
+            const blob = new Blob([code], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = 'message ' + sender + ' fade-in';
+            const time = document.createElement('span');
+            time.className = 'msg-time';
+            const now = new Date();
+            time.textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            // Parse le markdown pour détecter les blocs de code
+            if (sender === 'bot') {
+                div.innerHTML = parseMarkdown(text);
+                div.appendChild(time);
+                
+                // Appliquer la coloration syntaxique Prism
+                setTimeout(() => {
+                    div.querySelectorAll('pre code').forEach((block) => {
+                        Prism.highlightElement(block);
+                    });
+                }, 10);
+            } else {
+                div.textContent = text;
+                div.appendChild(time);
+            }
+            
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function clearChat() {
+            chatBox.innerHTML = '';
+        }
+
+        clearBtn.addEventListener('click', clearChat);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            if (!text) return;
+            addMessage(text, 'user');
+            input.value = '';
+            loader.style.display = 'block';
+            try {
+                const res = await fetch('/api/ia', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                addMessage(data.response || 'Erreur de réponse IA.', 'bot');
+            } catch (err) {
+                addMessage('Erreur de connexion au serveur.', 'bot');
+            } finally {
+                loader.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

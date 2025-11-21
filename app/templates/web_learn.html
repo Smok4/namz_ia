@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Apprentissage via Internet</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .snippet-item { background: rgba(34,34,43,0.92); border-radius: 14px; padding: 1em 1.2em; margin-bottom: 1.2em; box-shadow: 0 2px 8px #0002; }
+        .snippet-item pre { background: #111827; color: #fff; padding: 0.7em 1em; border-radius: 6px; margin-top: 0.5em; font-size: 1em; overflow-x: auto; }
+        .snippet-actions { margin-top: 0.5em; }
+        .snippet-actions button { margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Apprentissage via Internet</h1>
+            <nav class="tab-bar">
+                <a href="/" class="tab">💬 Chat IA</a>
+                <a href="/templates" class="tab">📦 Templates</a>
+                <a href="/web_learn" class="tab active">🌐 Apprentissage Web</a>
+                <a href="/auto_learn" class="tab">🤖 Apprentissage Auto</a>
+            </nav>
+        </header>
+        <main>
+            <form id="web-learn-form" class="template-form">
+                <input type="text" id="web-question" placeholder="Décris le code ou la question à chercher..." required>
+                <input type="text" id="web-lang" placeholder="Langage (ex: python, js, c, etc.)" required>
+                <button type="submit">Rechercher</button>
+            </form>
+            <section id="snippets-list"></section>
+        </main>
+    </div>
+    <script>
+        const form = document.getElementById('web-learn-form');
+        const snippetsList = document.getElementById('snippets-list');
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            snippetsList.innerHTML = '<div style="text-align:center;">Recherche en cours...</div>';
+            const question = document.getElementById('web-question').value;
+            const lang = document.getElementById('web-lang').value;
+            const res = await fetch('/api/web_learn', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await res.json();
+            if (!data.snippets || !data.snippets.length) {
+                snippetsList.innerHTML = '<div style="text-align:center;">Aucun code trouvé.</div>';
+                return;
+            }
+            snippetsList.innerHTML = '';
+            data.snippets.forEach(snippet => {
+                const div = document.createElement('div');
+                div.className = 'snippet-item fade-in';
+                div.innerHTML = `<b>Source :</b> <a href="${snippet.source}" target="_blank">${snippet.source}</a><br><pre>${snippet.code}</pre>`;
+                const actions = document.createElement('div');
+                actions.className = 'snippet-actions';
+                const btn = document.createElement('button');
+                btn.textContent = 'Ajouter à la mémoire IA';
+                btn.onclick = async () => {
+                    await fetch('/api/learn', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question, code: snippet.code, lang })
+                    });
+                    btn.textContent = 'Ajouté !';
+                    btn.disabled = true;
+                };
+                actions.appendChild(btn);
+                div.appendChild(actions);
+                snippetsList.appendChild(div);
+            });
+        };
+    </script>
+</body>
+</html>

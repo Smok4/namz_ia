@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestionnaire de templates de code</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Gestionnaire de templates de code</h1>
+            <nav class="tab-bar">
+                <a href="/" class="tab">💬 Chat IA</a>
+                <a href="/templates" class="tab active">📦 Templates</a>
+                <a href="/web_learn" class="tab">🌐 Apprentissage Web</a>
+                <a href="/auto_learn" class="tab">🤖 Apprentissage Auto</a>
+            </nav>
+        </header>
+        <main>
+            <section class="template-list">
+                <h2>Templates existants</h2>
+                <div id="templates"></div>
+            </section>
+            <section>
+                <h2>Ajouter / Modifier un template</h2>
+                <form id="template-form" class="template-form">
+                    <input type="text" id="tpl-key" placeholder="Clé unique (ex: python_function)" required>
+                    <input type="text" id="tpl-patterns" placeholder="Patterns (séparés par virgule)" required>
+                    <textarea id="tpl-template" placeholder="Template de code (utilisez {name}, {args}, {body}...)" rows="5" required></textarea>
+                    <button type="submit">Enregistrer</button>
+                </form>
+            </section>
+        </main>
+    </div>
+    <script>
+        // HTML escaping function to prevent XSS execution
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        async function fetchTemplates() {
+            const res = await fetch('/api/code_templates');
+            const data = await res.json();
+            const container = document.getElementById('templates');
+            container.innerHTML = '';
+            Object.entries(data).forEach(([key, tpl]) => {
+                const div = document.createElement('div');
+                div.className = 'template-item fade-in';
+                // Escape template content to display as text, not execute
+                const escapedPatterns = tpl.patterns.map(p => escapeHtml(p)).join(', ');
+                const escapedTemplate = escapeHtml(tpl.template);
+                div.innerHTML = `<b>${escapeHtml(key)}</b><br><span class="tpl-patterns">Patterns:</span> <code>${escapedPatterns}</code><br><pre>${escapedTemplate}</pre>`;
+                container.appendChild(div);
+            });
+        }
+        fetchTemplates();
+        document.getElementById('template-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const key = document.getElementById('tpl-key').value.trim();
+            const patterns = document.getElementById('tpl-patterns').value.split(',').map(s => s.trim());
+            const template = document.getElementById('tpl-template').value;
+            await fetch('/api/code_templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, patterns, template })
+            });
+            fetchTemplates();
+            e.target.reset();
+        };
+    </script>
+</body>
+</html>

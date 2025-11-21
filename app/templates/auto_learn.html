@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Apprentissage Automatique</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Apprentissage Automatique</h1>
+            <nav class="tab-bar">
+                <a href="/" class="tab">💬 Chat IA</a>
+                <a href="/templates" class="tab">📦 Templates</a>
+                <a href="/web_learn" class="tab">🌐 Apprentissage Web</a>
+                <a href="/auto_learn" class="tab active">🤖 Apprentissage Auto</a>
+            </nav>
+        </header>
+        <main>
+            <section style="text-align:center; margin-bottom:2em;">
+                <button id="start-btn" class="tab" style="background:linear-gradient(90deg,#00ffe7,#7f5af0);color:#181c2f;font-weight:700;">Démarrer l'apprentissage auto</button>
+                <button id="stop-btn" class="tab" style="background:linear-gradient(90deg,#7f5af0,#00ffe7);color:#181c2f;font-weight:700;display:none;">Arrêter</button>
+                <div id="auto-status" style="margin-top:1em;color:#7f5af0;font-size:1.1em;"></div>
+            </section>
+            <section>
+                <h2>État de l'apprentissage</h2>
+                <div id="auto-log" style="background:rgba(24,28,47,0.95);border-radius:12px;padding:1em;min-height:80px;max-height:220px;overflow-y:auto;color:#a5b4fc;"></div>
+            </section>
+        </main>
+    </div>
+    <script>
+        let running = false;
+        let interval = null;
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const status = document.getElementById('auto-status');
+        const log = document.getElementById('auto-log');
+
+        function logMsg(msg) {
+            log.innerHTML += `<div>${msg}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        startBtn.onclick = async () => {
+            running = true;
+            startBtn.style.display = 'none';
+            stopBtn.style.display = '';
+            status.textContent = 'Apprentissage automatique en cours...';
+            logMsg('⏳ Démarrage de l\'apprentissage automatique...');
+            await fetch('/api/auto_learn', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'start'})});
+            interval = setInterval(async () => {
+                const res = await fetch('/api/auto_learn', {method:'POST'});
+                const data = await res.json();
+                if(data.status==='ok') {
+                    logMsg('✅ ' + data.message);
+                } else {
+                    logMsg('⚠️ ' + (data.message||'Erreur'));
+                }
+            }, 5000);
+        };
+        stopBtn.onclick = async () => {
+            running = false;
+            startBtn.style.display = '';
+            stopBtn.style.display = 'none';
+            status.textContent = 'Apprentissage automatique arrêté.';
+            logMsg('⏹️ Apprentissage automatique stoppé.');
+            clearInterval(interval);
+            await fetch('/api/auto_learn', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop'})});
+        };
+    </script>
+</body>
+</html>
