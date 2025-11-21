@@ -301,37 +301,44 @@ def generate_project():
 
 @bp.route('/api/engine/stats', methods=['GET'])
 def engine_stats():
-    """Statistiques du moteur IA (V2 si activé)."""
+    """Statistiques avancées du moteur IA."""
     try:
-        import os
-        use_v2 = os.getenv('NAMZ_USE_ENGINE_V2', 'true').lower() == 'true'
+        from .ia_engine import get_engine_stats
         
-        stats = {
-            'engine_version': 'V2' if use_v2 else 'V1',
-            'timestamp': datetime.datetime.utcnow().isoformat()
-        }
-        
-        if use_v2:
-            try:
-                from .ia_engine_v2 import get_engine_v2
-                engine = get_engine_v2()
-                stats.update(engine.get_stats())
-            except Exception as e:
-                stats['error'] = f'V2 stats unavailable: {str(e)}'
-                stats['engine_version'] = 'V1 (fallback)'
+        stats = get_engine_stats()
+        stats['timestamp'] = datetime.datetime.utcnow().isoformat()
         
         return jsonify(stats)
-    
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.datetime.utcnow().isoformat()
+        }), 500
+
+@bp.route('/api/engine/reset', methods=['POST'])
+def engine_reset():
+    """Réinitialise les statistiques du moteur."""
+    try:
+        from .ia_engine import reset_engine_stats
+        
+        reset_engine_stats()
+        
+        return jsonify({
+            'status': 'ok',
+            'message': 'Statistiques réinitialisées',
+            'timestamp': datetime.datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
 
 @bp.route('/api/engine/cache/clear', methods=['POST'])
 def clear_engine_cache():
-    """Vide le cache du moteur V2."""
+    """Vide le cache du moteur."""
     try:
-        from .ia_engine_v2 import get_engine_v2
-        engine = get_engine_v2()
-        engine.clear_cache()
+        from .ia_engine import reset_engine_stats
+        reset_engine_stats()
         return jsonify({'status': 'ok', 'message': 'Cache cleared'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

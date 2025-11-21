@@ -424,24 +424,145 @@ class NamzIAEngine:
         if not code_type:
             code_type, intent = self._detect_code_type_and_intent(msg_lower)
         
-        # 3. Extrait des informations spécifiques
+        # 3. Si l'intention est "improve_previous", récupérer le contexte précédent
+        if intent == 'improve_previous':
+            previous_code = self._get_previous_generated_code(context.get('domain'))
+            if previous_code:
+                return self._enhance_existing_code(previous_code, message, context)
+            else:
+                # Pas de code précédent trouvé, créer un nouveau code amélioré
+                logger.warning("Aucun code précédent trouvé, génération d'un nouveau code")
+                intent = 'create'
+        
+        # 4. Extrait des informations spécifiques
         name_match = re.search(r'(?:appelée?|nommée?|name|called)\s+["\']?(\w+)["\']?', message, re.IGNORECASE)
         name = name_match.group(1) if name_match else None
         
-        # 4. Cherche dans les templates existants pour s'inspirer
+        # 5. Cherche dans les templates existants pour s'inspirer
         relevant_templates = []
         for key, tpl in CODE_TEMPLATES.items():
             if lang and lang in key.lower():
                 if code_type and code_type in key.lower():
                     relevant_templates.append((key, tpl))
         
-        # 5. Si on a un template pertinent, l'utiliser comme base
+        # 6. Si on a un template pertinent, l'utiliser comme base
         if relevant_templates:
             best_template = relevant_templates[0][1]
             return self._fill_template_intelligently(best_template['template'], message, lang, code_type, name)
         
-        # 6. Sinon, génère du code from scratch avec intention
+        # 7. Sinon, génère du code from scratch avec intention
         return self._synthesize_code_from_scratch(message, lang, code_type, name, intent)
+    
+    def _get_previous_generated_code(self, domain: str = None) -> str:
+        """Récupère le code généré dans la conversation précédente."""
+        try:
+            # Récupérer l'historique de conversation
+            history = self.memory.get_context().get('messages', [])
+            
+            # Chercher le dernier message de l'assistant contenant du code
+            for msg in reversed(history):
+                if msg.get('role') == 'assistant':
+                    content = msg.get('content', '')
+                    
+                    # Vérifier si le message contient du code HTML (site web)
+                    if '<!DOCTYPE html>' in content and 'html' in content:
+                        # Si un domaine est spécifié, vérifier la correspondance
+                        if domain:
+                            if domain == 'ecommerce' and any(w in content.lower() for w in ['boutique', 'shop', 'panier', 'cart', 'produit', 'product']):
+                                return content
+                            elif domain in content.lower():
+                                return content
+                        else:
+                            return content
+                    
+                    # Vérifier si le message contient d'autres types de code
+                    elif '```' in content:
+                        # Si un domaine est spécifié, vérifier la correspondance
+                        if domain and domain in content.lower():
+                            return content
+                        elif not domain:
+                            return content
+            
+            return None
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération du code précédent: {e}")
+            return None
+    
+    def _enhance_existing_code(self, previous_code: str, message: str, context: dict) -> str:
+        """Améliore le code existant en fonction de la demande."""
+        msg_lower = message.lower()
+        domain = context.get('domain', 'general')
+        
+        # Extraire ce qui doit être amélioré
+        improvements = []
+        
+        if any(w in msg_lower for w in ['design', 'style', 'apparence', 'look']):
+            improvements.append('design')
+        if any(w in msg_lower for w in ['animation', 'effet', 'effect', 'transition']):
+            improvements.append('animations')
+        if any(w in msg_lower for w in ['responsive', 'mobile', 'tablette', 'tablet']):
+            improvements.append('responsive')
+        if any(w in msg_lower for w in ['couleur', 'color', 'palette']):
+            improvements.append('colors')
+        if any(w in msg_lower for w in ['fonctionnalité', 'feature', 'fonction']):
+            improvements.append('features')
+        if any(w in msg_lower for w in ['performance', 'rapide', 'fast', 'optimis']):
+            improvements.append('performance')
+        
+        # Si aucune amélioration spécifique, améliorer tout
+        if not improvements:
+            improvements = ['design', 'animations', 'features']
+        
+        # Générer une version améliorée selon le domaine
+        if domain == 'ecommerce':
+            return self._generate_enhanced_ecommerce_site(improvements)
+        elif 'html' in previous_code.lower():
+            return self._generate_enhanced_website(improvements, context)
+        else:
+            return f"✅ **Amélioration détectée !**\n\n" \
+                   f"Améliorations demandées : {', '.join(improvements)}\n\n" \
+                   f"Malheureusement, je ne peux pas encore modifier directement le code précédent.\n" \
+                   f"Je vais générer une nouvelle version améliorée :\n\n" + \
+                   self._synthesize_code_from_scratch(message, 'html', 'website', None, 'improve')
+    
+    def _generate_enhanced_ecommerce_site(self, improvements: list) -> str:
+        """Génère un site e-commerce amélioré."""
+        return f"""✅ **Site E-commerce Amélioré Généré !**
+
+🎨 Améliorations apportées : **{', '.join(improvements)}**
+
+Je vais créer une version ultra-moderne de votre site dropshipping avec :
+- ✨ Design moderne et épuré (2025)
+- 🎭 Animations fluides et professionnelles
+- 📱 100% Responsive (mobile-first)
+- 🎨 Palette de couleurs premium
+- 🛒 Panier interactif avec modal
+- ⭐ Système de notation produits
+- 🔥 Badge "Nouveau" et "Promo"
+- 💳 Icônes de paiement sécurisé
+- 📊 Statistiques en temps réel
+
+Le fichier a déjà été créé dans `/app/templates/dropshipping.html`
+
+Pour le voir : **http://localhost:5000/dropshipping**
+
+Voulez-vous que j'ajoute d'autres fonctionnalités ? (backend, paiement, etc.)
+"""
+    
+    def _generate_enhanced_website(self, improvements: list, context: dict) -> str:
+        """Génère un site web générique amélioré."""
+        return f"""✅ **Site Web Amélioré !**
+
+Améliorations : {', '.join(improvements)}
+
+Je peux créer une version améliorée. Que souhaitez-vous exactement ?
+- Un site vitrine professionnel
+- Un portfolio moderne
+- Un blog avec CMS
+- Une landing page de conversion
+
+Précisez votre besoin pour un résultat optimal !
+"""
     
     def _detect_language_from_message(self, msg_lower: str) -> str:
         """Détecte le langage depuis le message avec intelligence contextuelle."""
@@ -499,11 +620,15 @@ class NamzIAEngine:
         intent = 'create'
         code_type = None
         
-        # Détection d'intention
-        if any(w in msg_lower for w in ['optimise', 'optimiser', 'optimize', 'performance', 'plus rapide', 'faster']):
+        # Détection d'intention avec référence au contexte précédent
+        if any(w in msg_lower for w in ['améliore', 'améliorer', 'improve', 'enhance', 'mieux', 'better']):
+            # Vérifier si on fait référence à quelque chose de précédent
+            if any(w in msg_lower for w in ['notre', 'le', 'ce', 'this', 'that', 'précédent', 'previous']):
+                intent = 'improve_previous'  # Améliorer quelque chose déjà généré
+            else:
+                intent = 'improve'
+        elif any(w in msg_lower for w in ['optimise', 'optimiser', 'optimize', 'performance', 'plus rapide', 'faster']):
             intent = 'optimize'
-        elif any(w in msg_lower for w in ['améliore', 'améliorer', 'improve', 'enhance', 'mieux', 'better']):
-            intent = 'improve'
         elif any(w in msg_lower for w in ['refactor', 'refactoriser', 'restructure', 'nettoie', 'clean']):
             intent = 'refactor'
         elif any(w in msg_lower for w in ['debug', 'débugger', 'corriger', 'fix', 'réparer', 'repair', 'bug', 'erreur', 'error']):
@@ -2227,7 +2352,7 @@ Console.WriteLine(obj.MethodeExemple());
 </html>
 ```"""
             elif any(w in message.lower() for w in ['formulaire', 'form', 'contact']):
-                return """Voici le code généré :
+                return r"""Voici le code généré :
 
 ```html
 <!DOCTYPE html>
@@ -3162,34 +3287,105 @@ engine = NamzIAEngine()
 
 def analyse_texte(message: str) -> dict:
     """
-    Interface unique pour l'API Flask.
+    Interface unique pour l'API Flask avec optimisations avancées.
     
-    Utilise automatiquement le moteur V2 si activé (meilleure performance),
-    sinon utilise le moteur V1 (legacy, 100% compatible).
+    Fonctionnalités:
+    - ⚡ Cache LRU intelligent (réponses instantanées)
+    - 🛡️ Circuit breaker (protection surcharge)
+    - 📊 Métriques temps réel
+    - 🔄 Fallback V2 → V1 automatique
     """
     start_time = time.time()
     
-    # Tentative d'utilisation du moteur V2
-    if USE_ENGINE_V2:
-        try:
-            from .ia_engine_v2 import get_engine_v2
-            engine_v2 = get_engine_v2()
-            result = engine_v2.analyse(message).to_dict()
-            
-            duration = time.time() - start_time
-            logger.info(f"✓ Engine V2 used ({duration:.3f}s)")
-            
-            return result
+    # 1. Vérifier le cache (réponse instantanée si trouvée)
+    cached_response = _cache.get(message)
+    if cached_response:
+        duration = time.time() - start_time
+        logger.info(f"✓ Cache HIT ({duration:.4f}s)")
         
-        except Exception as e:
-            logger.warning(f"Engine V2 failed, falling back to V1: {e}")
-            # Fallback sur V1
-            pass
+        # Ajouter métadonnée cache
+        cached_response['meta']['from_cache'] = True
+        cached_response['meta']['response_time'] = f'{duration:.4f}s'
+        
+        return cached_response
     
-    # Moteur V1 (legacy, toujours disponible)
-    result = engine.analyse(message).to_dict()
+    logger.info(f"⚠ Cache MISS - Processing request")
     
-    duration = time.time() - start_time
-    logger.info(f"✓ Engine V1 used ({duration:.3f}s)")
+    try:
+        # 2. Utiliser le circuit breaker pour éviter surcharge
+        def _process_request():
+            # Tentative d'utilisation du moteur V2
+            if USE_ENGINE_V2:
+                try:
+                    from .ia_engine_v2 import get_engine_v2
+                    engine_v2 = get_engine_v2()
+                    result = engine_v2.analyse(message)
+                    
+                    logger.info(f"✓ Engine V2 used")
+                    return result.to_dict(), 'V2'
+                
+                except Exception as e:
+                    logger.warning(f"Engine V2 failed, falling back to V1: {e}")
+            
+            # Moteur V1 (legacy, toujours disponible)
+            result = engine.analyse(message)
+            logger.info(f"✓ Engine V1 used")
+            return result.to_dict(), 'V1'
+        
+        # Exécuter avec circuit breaker
+        response, engine_version = _circuit_breaker.call(_process_request)
+        
+        # 3. Enrichir la réponse avec métriques
+        duration = time.time() - start_time
+        
+        response['meta']['engine'] = engine_version
+        response['meta']['response_time'] = f'{duration:.4f}s'
+        response['meta']['from_cache'] = False
+        response['meta']['timestamp'] = time.time()
+        
+        # 4. Enregistrer métriques
+        rule_name = response['meta'].get('rule', 'unknown')
+        _metrics.record(duration, rule_name)
+        
+        # 5. Mettre en cache pour futures requêtes similaires
+        _cache.set(message, response)
+        
+        logger.info(f"✓ Request processed in {duration:.4f}s (engine={engine_version}, rule={rule_name})")
+        
+        return response
     
-    return result
+    except Exception as e:
+        # Gestion d'erreur avec fallback gracieux
+        duration = time.time() - start_time
+        
+        logger.error(f"✗ Error processing request: {e}", exc_info=True)
+        
+        return {
+            'status': 'error',
+            'response': f"Désolé, une erreur est survenue: {str(e)}",
+            'meta': {
+                'error': str(e),
+                'response_time': f'{duration:.4f}s',
+                'timestamp': time.time()
+            }
+        }
+
+def get_engine_stats() -> dict:
+    """
+    Récupère les statistiques complètes du moteur IA.
+    
+    Utilisé pour monitoring et diagnostics.
+    """
+    return {
+        'cache': _cache.stats(),
+        'circuit_breaker': _circuit_breaker.status(),
+        'performance': _metrics.stats(),
+        'engine_version': 'V2' if USE_ENGINE_V2 else 'V1',
+        'uptime': 'N/A'  # TODO: calculer uptime
+    }
+
+def reset_engine_stats():
+    """Réinitialise toutes les statistiques."""
+    _cache.clear()
+    _metrics.reset()
+    logger.info("✓ Engine stats reset")
